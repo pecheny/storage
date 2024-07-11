@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<project>
+
+    <meta title="Sample" package="storage.example" version="1.0.0" company="shoo"/>
+    <app main="Main"  file="StorageExample"/>
+
+    <window antialiasing="4"/>
+    <window background="#ffffff" fps="60" />
+    <window background="#ffffff" fps="60" width="1280" height="760" unless="html5"/>
+    <source path="src"/>
+
+    <haxelib name="openfl"/>
+    <haxelib name="storage"/>
+
+    <define name="localStoragePrefix" value="${meta.packageName}" />
+</project>
