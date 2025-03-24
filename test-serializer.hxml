@@ -1,0 +1,4 @@
+-cp ./src
+-lib tink_json
+-D dump=pretty
+--run fu.SerializableTest
