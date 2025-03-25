@@ -10,8 +10,11 @@ using haxe.macro.ComplexTypeTools;
 class SerializableMacro {
     public static function build() {
         var fields = Context.getBuildFields();
-        var dumpExprs:Array<Expr> = [];
-        var loadExprs:Array<Expr> = [];
+        var loadExprs = new MethodExprs(fields, "load");
+        loadExprs.addArg("data", macro :Dynamic);
+
+        var dumpExprs = new MethodExprs(fields, "dump");
+
         dumpExprs.push(macro var data = {});
         for (f in fields) {
             switch f {
@@ -25,7 +28,6 @@ class SerializableMacro {
                         case null:
                             Context.error('Define explicit type for $name variable to be serialized', pos);
                         case macro :Int, macro :String, macro :Float, macro :Bool:
-                            trace(name);
                             dumpExprs.push(macro Reflect.setField(data, $v{name}, $i{name}));
                             loadExprs.push(macro $i{name} = Reflect.field(data, $v{name}));
                         case TPath(p):
@@ -48,32 +50,64 @@ class SerializableMacro {
                     }
 
                 case {meta: meta, pos: pos, name: name}:
-                    if (meta.filter(f -> f.name == ':serialize').length > 0)
+                    if (meta?.filter(f -> f.name == ':serialize').length > 0)
                         Context.error('Serialization of $name not supported', pos);
                 case _:
             }
         }
         dumpExprs.push(macro return data);
-        fields.push({
-            name: "dump",
-            access: [APublic],
-            kind: FFun({
-                args: [],
-                expr: {expr: EBlock(dumpExprs), pos: Context.currentPos()}
-            }),
-            pos: Context.currentPos()
-        });
 
-        fields.push({
-            name: "load",
-            access: [APublic],
-            kind: FFun({
-                args: [{name: "data", type: macro :Dynamic}],
-                expr: {expr: EBlock(loadExprs), pos: Context.currentPos()}
-            }),
-            pos: Context.currentPos()
-        });
         return fields;
+    }
+}
+
+class MethodExprs {
+    var args:Array<FunctionArg> = [];
+    var exprs:Array<Expr> = [];
+
+    public function new(fields:Array<Field>, name) {
+        var found = false;
+        for (f in fields) {
+            if (f.name != name)
+                continue;
+            switch f {
+                case {
+                    access: [APublic],
+                    kind: FFun({
+                        args: args,
+                        expr: {expr: EBlock(exprs)}
+                    }),
+                }:
+                    this.exprs = exprs;
+                    this.args = args;
+                    found = true;
+                    break;
+                case {
+                    pos: pos
+                }:
+                    trace('failing $name');
+                    Context.error('Wrong $name() signature for Serializable ', pos);
+                case _:
+            }
+        }
+        if (!found)
+            fields.push({
+                name: name,
+                access: [APublic],
+                kind: FFun({
+                    args: this.args,
+                    expr: {expr: EBlock(this.exprs), pos: Context.currentPos()}
+                }),
+                pos: Context.currentPos()
+            });
+    }
+
+    public function push(e) {
+        exprs.push(e);
+    }
+
+    public function addArg(name, type) {
+        args.push({name: name, type: type});
     }
 }
 #end

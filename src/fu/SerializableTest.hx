@@ -53,4 +53,8 @@ class Bar implements Serializable {
     @:serialize public var stringVar:String = "str";
 
     public function new() {}
+    
+    public function dump() {
+        trace('dumping bar');
+    }
 }
