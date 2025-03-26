@@ -1,4 +1,11 @@
 -cp ./src
 -lib tink_json
+
 -D dump=pretty
+-D js-es=6
+
+# --main fu.SerializableTest
+# --js out.js
+# --cmd node out.js
+
 --run fu.SerializableTest
