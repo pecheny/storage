@@ -29,7 +29,7 @@ interface SerializableExprs {
     /** Assuming that data variable in the scope represents serialized dynamic structure, returns an expression the value of which should be assigned/put to runtime field **/
     function serializedValueExpr(name:String):Expr;
 
-    // function assertExpr(name:Expr):Null<Expr>;
+    function assertExpr(name:Expr):Null<Expr>;
     // function assignExpr(name:String):Expr;
     // function extractExpr(name:String):Expr;
     // assignExpr: (name, extractExpr) -> macro $i{name} = $extractExpr,
@@ -48,6 +48,7 @@ class SerializerStorage {
 }
 
 class ArraySExprs implements SerializableExprs {
+    static var jPostfix = 0;
     var valueExprs:SerializableExprs;
 
     public function new(valueExprs) {
@@ -67,10 +68,10 @@ class ArraySExprs implements SerializableExprs {
         return macro {
             $name.resize(0);
             var data = $serializedValueExpr; // Reflect.field(data, $v{name});
-            for (j in 0...data.length) {
-                $name[j] = data[j];
-                // ${valueExprs.assertExpr(macro $name[j])};
-                // ${valueExprs.loadValueExpr(macro $name[j], macro data[j])};
+            for ($i{"j"+ ++jPostfix} in 0...data.length) {
+                // $name[$i{"j"+jPostfix}] = data[$i{"j"+jPostfix}];
+                ${valueExprs.assertExpr(macro $name[$i{"j"+jPostfix}])};
+                ${valueExprs.loadValueExpr(macro $name[$i{"j"+jPostfix}], macro data[$i{"j"+jPostfix}])};
                 // ${valueExprs.loadValueExpr(macro $name[j], macro ${valueExprs.serializedValueExpr(macro data[j])})};
             }
         }
@@ -81,9 +82,9 @@ class ArraySExprs implements SerializableExprs {
         return macro Reflect.field(data, $v{name});
     }
 
-    // public function assertExpr(name:Expr):Null<Expr> {
-    //     return macro if($name == null) $name = [];
-    // }
+    public function assertExpr(name:Expr):Null<Expr> {
+        return macro if($name == null) $name = [];
+    }
 }
 
 class ValueSExprs implements SerializableExprs {
@@ -104,9 +105,9 @@ class ValueSExprs implements SerializableExprs {
         return macro Reflect.field(data, $v{name});
     }
 
-    // public function assertExpr(name:Expr):Null<Expr> {
-    //     return macro null;
-    // }
+    public function assertExpr(name:Expr):Null<Expr> {
+        return macro null;
+    }
 }
 
 class ClassSExprs implements SerializableExprs {
@@ -127,9 +128,10 @@ class ClassSExprs implements SerializableExprs {
         return macro Reflect.field(data, $v{name});
     }
 
-    // public function assertExpr(name:Expr):Null<Expr> {
-    //     throw new haxe.exceptions.NotImplementedException();
-    // }
+    public function assertExpr(name:Expr):Null<Expr> {
+        return macro null;
+        // throw new haxe.exceptions.NotImplementedException();
+    }
 }
 
 class SerializableMacro {

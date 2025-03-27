@@ -16,15 +16,15 @@ class SerializableTest {
         var foo = new Foo();
         var data = Json.stringify(foo.dump());
         trace(data, Type.getClass(data));
-        data = '{"intVar":6,"cl":{"stringVar":"rts", "strings":["foo", "bar"]},"enu":"C","boolVar":false}';
+        data = '{"intVar":6,"cl":{"stringVar":"rts", "strings":[["foo", "bar"]]},"enu":"C","boolVar":false}';
         var parsed = Json.parse(data);
         trace(parsed.enu);
         foo.load(parsed);
         assert(foo.intVar, 6);
         assert(foo.boolVar, false, "bool");
         assert(foo.cl.stringVar, "rts");
-        assert(foo.cl.strings.indexOf("foo"), 0, "foo");
-        assert(foo.cl.strings.indexOf("bar"), 1, "bar");
+        assert(foo.cl.strings[0].indexOf("foo"), 0, "foo");
+        assert(foo.cl.strings[0].indexOf("bar"), 1, "bar");
         trace('done');
         // assert(true, foo.enu == C, "enum");
 
@@ -54,7 +54,7 @@ enum A {
 
 class Bar implements Serializable {
     @:serialize public var stringVar:String = "str";
-    @:serialize public var strings:Array<String> = ["str"];
+    @:serialize public var strings:Array<Array< String >> = [["str"]];
 
     public function new() {}
     
