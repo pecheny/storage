@@ -29,8 +29,8 @@ class SerializableTest {
         assert(foo.bars[0].stringVar, "rts");
         assert(foo.fixedBars[0], barFromFixed);
         assert("fixed", barFromFixed.stringVar);
+        assert(true, foo.enu == C, "enum");
         trace('done');
-        // assert(true, foo.enu == C, "enum");
 
         // trace(tink.Json.stringify(foo.enu));
     }
@@ -48,7 +48,7 @@ class Foo implements Serializable {
     @:serialize(itemCtr = new Bar()) public var bars:Array<Bar> = [];
     @:serialize(fixedArray = true) public var fixedBars:Array<Bar> = [new Bar()];
 
-    // @:serialize public var enu:A = C;
+    @:serialize public var enu:A = B(5);
 
     public function new() {}
 }
@@ -61,6 +61,7 @@ enum A {
 class Bar implements Serializable {
     @:serialize public var stringVar:String = "str";
     @:serialize public var strings:Array<Array<String>> = [["str"]];
+    // @:serialize public var map:Map<String, String> = ["key" => "val"];
 
     public function new() {}
 

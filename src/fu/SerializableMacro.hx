@@ -39,7 +39,7 @@ interface SerializableExprs {
 }
 
 class SerializerStorage {
-    static final singletones:Map<SerializingType, SerializableExprs> = [SClass(null) => new ClassSExprs(), SValue => new ValueSExprs()];
+    static final singletones:Map<SerializingType, SerializableExprs> = [SClass(null) => new ClassSExprs(), SValue => new ValueSExprs(), SEnum => new TinkSExprs()];
 
     public static function getSExpressions(type:SerializingType):SerializableExprs {
         return switch type {
@@ -131,6 +131,29 @@ class ArraySExprs implements SerializableExprs {
     }
 }
 
+class TinkSExprs implements SerializableExprs {
+    public function new() {}
+
+    /** Returns an expression the value of which represents value from runtime to be serialized **/
+    public function runtimeValueExpr(name:Expr):Expr {
+        return macro haxe.Json.parse(tink.Json.stringify($name));
+    }
+
+    /** receives expression of "value extracted from data" and Returns an expression which put received value to the runtime instance **/
+    public function loadValueExpr(name:Expr, serializedValueExpr:Expr):Expr {
+        return macro $name = $serializedValueExpr;
+    }
+
+    /** Assuming that data variable in the scope represents serialized dynamic structure, returns an expression the value of which should be assigned/put to runtime field **/
+    public function serializedValueExpr(name:String):Expr {
+        return macro tink.Json.parse(haxe.Json.stringify(data.$name));
+    }
+
+    public function assertExpr(name:Expr):Null<Expr> {
+        return macro null;
+    }
+}
+
 class ValueSExprs implements SerializableExprs {
     public function new() {}
 
@@ -181,8 +204,6 @@ class ClassSExprs implements SerializableExprs {
             return macro null;
         trace("\n\n", itemConstructorExpr);
         return macro if ($name == null) $name = $itemConstructorExpr;
-
-        // throw new haxe.exceptions.NotImplementedException();
     }
 }
 
