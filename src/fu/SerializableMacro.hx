@@ -18,6 +18,7 @@ enum SerializingType {
     SValue;
     SEnum;
     SArray(vtype:SerializingType);
+    SFArray(vtype:SerializingType);
 }
 
 interface SerializableExprs {
@@ -43,14 +44,57 @@ class SerializerStorage {
     public static function getSExpressions(type:SerializingType):SerializableExprs {
         return switch type {
             case SArray(vtype): new ArraySExprs(getSExpressions(vtype));
+            case SFArray(vtype): new FixedArraySExprs(getSExpressions(vtype));
             case SClass(ctr): if (ctr != null) new ClassSExprs(ctr) else singletones[SClass(null)];
             case single: singletones[single];
         }
     }
 }
 
+/**
+    Assuming thar runtime representation of this array has fixed size, already exists as well as all item instances.
+    If size of serialized representation differs, unpredictable errors would occure.
+**/
+class FixedArraySExprs implements SerializableExprs {
+    static var jPostfix = 0;
+
+    var valueExprs:SerializableExprs;
+
+    public function new(valueExprs) {
+        this.valueExprs = valueExprs;
+    }
+
+    /** Returns an expression the value of which represents value from runtime to be serialized **/
+    public function runtimeValueExpr(name:Expr):Expr {
+        // return macro [for (rv in macro $name) macro ${valueExprs.runtimeValueExpr(macro $i{"rv"})}];
+        return macro $name.copy();
+    }
+
+    /** receives expression of "value extracted from data" and Returns an expression which put received value to the runtime instance 
+        name is expr of runtime array, serializedValueExpr is expr of array contains serialized item representations.
+    **/
+    public function loadValueExpr(name:Expr, serializedValueExpr:Expr):Expr {
+        return macro {
+            var data = $serializedValueExpr; // Reflect.field(data, $v{name});
+            for ($i{"j" + ++jPostfix} in 0...data.length) {
+                ${valueExprs.loadValueExpr(macro $name[$i{"j" + jPostfix}], macro data[$i{"j" + jPostfix}])};
+            }
+        }
+    }
+
+    /** Assuming that data variable in the scope represents serialized dynamic structure, returns an expression the value of which should be assigned/put to runtime field **/
+    public function serializedValueExpr(name:String):Expr {
+        return macro Reflect.field(data, $v{name});
+    }
+
+    public function assertExpr(name:Expr):Null<Expr> {
+        return macro null;
+    }
+}
+
 class ArraySExprs implements SerializableExprs {
     static var jPostfix = 0;
+
     var valueExprs:SerializableExprs;
 
     public function new(valueExprs) {
@@ -70,11 +114,9 @@ class ArraySExprs implements SerializableExprs {
         return macro {
             $name.resize(0);
             var data = $serializedValueExpr; // Reflect.field(data, $v{name});
-            for ($i{"j"+ ++jPostfix} in 0...data.length) {
-                // $name[$i{"j"+jPostfix}] = data[$i{"j"+jPostfix}];
-                ${valueExprs.assertExpr(macro $name[$i{"j"+jPostfix}])};
-                ${valueExprs.loadValueExpr(macro $name[$i{"j"+jPostfix}], macro data[$i{"j"+jPostfix}])};
-                // ${valueExprs.loadValueExpr(macro $name[j], macro ${valueExprs.serializedValueExpr(macro data[j])})};
+            for ($i{"j" + ++jPostfix} in 0...data.length) {
+                ${valueExprs.assertExpr(macro $name[$i{"j" + jPostfix}])};
+                ${valueExprs.loadValueExpr(macro $name[$i{"j" + jPostfix}], macro data[$i{"j" + jPostfix}])};
             }
         }
     }
@@ -85,7 +127,7 @@ class ArraySExprs implements SerializableExprs {
     }
 
     public function assertExpr(name:Expr):Null<Expr> {
-        return macro if($name == null) $name = [];
+        return macro if ($name == null) $name = [];
     }
 }
 
@@ -114,6 +156,7 @@ class ValueSExprs implements SerializableExprs {
 
 class ClassSExprs implements SerializableExprs {
     var itemConstructorExpr:Expr;
+
     public function new(itemConstructor:Expr = null) {
         this.itemConstructorExpr = itemConstructor;
     }
@@ -144,7 +187,8 @@ class ClassSExprs implements SerializableExprs {
 }
 
 typedef FieldConfig = {
-    ?itemCtr:Expr
+    ?itemCtr:Expr,
+    ?fixedArray:Bool
 }
 
 class SerializableMacro {
@@ -188,7 +232,6 @@ class SerializableMacro {
         //         }
         //     }
         // }
-        
 
         function toSerializingType(ct:ComplexType, name, pos, ctx:FieldConfig) {
             return switch ct {
@@ -198,7 +241,11 @@ class SerializableMacro {
                     SValue;
                 case TPath({name: 'Array', params: [TPType(cpt)]}):
                     // macro {var data = }
-                    SArray(toSerializingType(cpt, name, pos, ctx));
+                    if (ctx.fixedArray) {
+                        SFArray(toSerializingType(cpt, name, pos, ctx));
+                    } else {
+                        SArray(toSerializingType(cpt, name, pos, ctx));
+                    }
                 case TPath(p):
                     var t:Type = ct.toType();
                     switch t {
@@ -228,16 +275,18 @@ class SerializableMacro {
                 case {
                     name: name,
                     kind: FVar(ct),
-                    meta: [{name: ":serialize", params:params}],
+                    meta: [{name: ":serialize", params: params}],
                     pos: pos
                 }:
-                    var ctx = { };
+                    var ctx = {};
                     // Exprs.eval(macro ctx = {bar:1});
-                    if (params !=null)
+                    if (params != null)
                         for (p in params) {
                             trace(p);
                             switch p.expr {
-                                case EBinop(OpAssign, {expr:EConst(CIdent(prop))}, e2):
+                                case EBinop(OpAssign, {expr: EConst(CIdent(prop))}, macro true):
+                                    Reflect.setField(ctx, prop, true);
+                                case EBinop(OpAssign, {expr: EConst(CIdent(prop))}, e2):
                                     Reflect.setField(ctx, prop, e2);
                                 case _:
                             }
@@ -247,15 +296,15 @@ class SerializableMacro {
 
                     var stype = toSerializingType(ct, name, pos, ctx);
                     var sexprs = SerializerStorage.getSExpressions(stype);
-                    dumpExprs.push(macro Reflect.setField(data, $v{name}, ${sexprs.runtimeValueExpr(macro $i{name})} ));
+                    dumpExprs.push(macro Reflect.setField(data, $v{name}, ${sexprs.runtimeValueExpr(macro $i{name})}));
                     loadExprs.push(sexprs.loadValueExpr(macro $i{name}, sexprs.serializedValueExpr(name)));
-                    // trace(stype);
-                    // switch stype {
-                    //     case SSkip:
-                    //     case _:
-                    //         dumpExprs.push(exprsMap[stype].dump(name));
-                    //         loadExprs.push(exprsMap[stype].load(name));
-                    // }
+                // trace(stype);
+                // switch stype {
+                //     case SSkip:
+                //     case _:
+                //         dumpExprs.push(exprsMap[stype].dump(name));
+                //         loadExprs.push(exprsMap[stype].load(name));
+                // }
                 case {meta: meta, pos: pos, name: name}:
                     if (meta?.filter(f -> f.name == ':serialize').length > 0)
                         Context.error('Serialization of $name not supported', pos);

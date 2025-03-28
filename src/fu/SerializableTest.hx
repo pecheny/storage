@@ -14,9 +14,10 @@ class SerializableTest {
         // return;
 
         var foo = new Foo();
+        var barFromFixed = foo.fixedBars[0];
         var data = Json.stringify(foo.dump());
         trace(data, Type.getClass(data));
-        data = '{"intVar":6,"cl":{"stringVar":"rts", "strings":[["foo", "bar"]]},"enu":"C","boolVar":false, "bars":[{"stringVar":"rts", "strings":[["foo", "bar"]]}]}';
+        data = '{"intVar":6,"cl":{"stringVar":"rts", "strings":[["foo", "bar"]]},"enu":"C","boolVar":false, "fixedBars":[{"stringVar":"fixed", "strings":[["foo", "bar"]]}], "bars":[{"stringVar":"rts", "strings":[["foo", "bar"]]}]}';
         var parsed = Json.parse(data);
         trace(parsed.enu);
         foo.load(parsed);
@@ -26,6 +27,8 @@ class SerializableTest {
         assert(foo.cl.strings[0].indexOf("foo"), 0, "foo");
         assert(foo.cl.strings[0].indexOf("bar"), 1, "bar");
         assert(foo.bars[0].stringVar, "rts");
+        assert(foo.fixedBars[0], barFromFixed);
+        assert("fixed", barFromFixed.stringVar);
         trace('done');
         // assert(true, foo.enu == C, "enum");
 
@@ -42,7 +45,9 @@ class Foo implements Serializable {
     @:serialize public var intVar:Int = 5;
     @:serialize public var boolVar:Bool = true;
     @:serialize public var cl:Bar = new Bar();
-    @:serialize(itemCtr=new Bar()) public var bars:Array<Bar> = [];
+    @:serialize(itemCtr = new Bar()) public var bars:Array<Bar> = [];
+    @:serialize(fixedArray = true) public var fixedBars:Array<Bar> = [new Bar()];
+
     // @:serialize public var enu:A = C;
 
     public function new() {}
@@ -55,10 +60,10 @@ enum A {
 
 class Bar implements Serializable {
     @:serialize public var stringVar:String = "str";
-    @:serialize public var strings:Array<Array< String >> = [["str"]];
+    @:serialize public var strings:Array<Array<String>> = [["str"]];
 
     public function new() {}
-    
+
     public function dump() {
         trace('dumping bar');
     }
