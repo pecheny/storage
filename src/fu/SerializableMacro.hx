@@ -17,6 +17,7 @@ enum SerializingType {
     SClass(?ctr:Expr);
     SValue;
     SEnum;
+    SMap;
     SArray(vtype:SerializingType);
     SFArray(vtype:SerializingType);
 }
@@ -39,7 +40,12 @@ interface SerializableExprs {
 }
 
 class SerializerStorage {
-    static final singletones:Map<SerializingType, SerializableExprs> = [SClass(null) => new ClassSExprs(), SValue => new ValueSExprs(), SEnum => new TinkSExprs()];
+    static final singletones:Map<SerializingType, SerializableExprs> = [
+        SClass(null) => new ClassSExprs(),
+        SValue => new ValueSExprs(),
+        SEnum => new TinkSExprs(),
+        SMap => new TinkSExprs()
+    ];
 
     public static function getSExpressions(type:SerializingType):SerializableExprs {
         return switch type {
@@ -276,6 +282,8 @@ class SerializableMacro {
                             SClass(ctx.itemCtr);
                         case TEnum(t, params):
                             SEnum;
+                        case TType(_.get()=>{name:"Map"}, params):
+                            SMap;
                         case _:
                             Context.error('Serialization of $t not supported', pos);
                     }
