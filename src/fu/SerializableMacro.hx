@@ -255,6 +255,11 @@ class SerializableMacro {
                     kind: FVar(ct),
                     meta: [{name: ":serialize", params: params}],
                     pos: pos
+                }, {
+                    name: name,
+                    kind: FProp(_, _, ct, _),
+                    meta: [{name: ":serialize", params: params}],
+                    pos: pos
                 }:
                     var ctx = {};
                     if (params != null)
