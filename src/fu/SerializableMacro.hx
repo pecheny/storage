@@ -292,8 +292,9 @@ class MethodExprs {
     var args:Array<FunctionArg> = [];
     var exprs:Array<Expr> = [];
 
+    var found = false;
+
     public function new(fields:Array<Field>, name) {
-        var found = false;
         for (f in fields) {
             if (f.name != name)
                 continue;
@@ -333,6 +334,8 @@ class MethodExprs {
     }
 
     public function addArg(name, type) {
+        if (found)
+            return;
         args.push({name: name, type: type});
     }
 }
