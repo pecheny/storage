@@ -247,7 +247,7 @@ class SerializableMacro {
         loadExprs.addArg("data", macro :Dynamic);
         var dumpExprs = new MethodExprs(fields, "dump");
 
-        dumpExprs.push(macro var data = {});
+        dumpExprs.unshift(macro var data = {});
         for (f in fields) {
             switch f {
                 case {
@@ -331,6 +331,10 @@ class MethodExprs {
 
     public function push(e) {
         exprs.push(e);
+    }
+
+    public function unshift(e) {
+        exprs.unshift(e);
     }
 
     public function addArg(name, type) {
