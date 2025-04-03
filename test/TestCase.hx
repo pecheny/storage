@@ -18,6 +18,8 @@ class TestCase extends utest.Test {
             "map":[["key", "newVal"]],
             "cl": { "stringVar": "rts", "strings": [["foo", "bar"]] },
             "enu": {"C":{}},
+            "fold": { "Folded":{"a":{"Bfo":{}}}},
+            "dataEnum": { "DataParam":{"data":{"value": "NEW DATA"}}},
             "boolVar": false,
             "fixedBars": [{ "stringVar": "fixed", "strings": [["foo", "bar"]] }],
             "bars": [{ "stringVar": "ttt", "strings": [["foo", "bar"]] }]
@@ -25,7 +27,6 @@ class TestCase extends utest.Test {
         var deser = Json.parse(data);
 
         foo.load(deser);
-        trace("foo ", foo.enu);
         trace(foo.dump());
     }
 
@@ -56,6 +57,13 @@ class TestCase extends utest.Test {
     
     function specEnum() {
         foo.enu.match(C) == true;
+        foo.fold.match(Folded(Bfo)) == true;
+        var s = switch foo.dataEnum {
+            case DataParam(data):
+                data.value == "NEW DATA";
+            case _: false;
+        };
+        s == true;
     }
     
     
@@ -71,9 +79,10 @@ class Foo implements Serializable {
     @:serialize(itemCtr = new Bar()) public var bars:Array<Bar> = [];
     @:serialize(fixedArray = true) public var fixedBars:Array<Bar> = [new Bar()];
 
-    // @:serialize var data:DataParam = {value: "DATA"};
+    @:serialize public var data:DataParam = {value: "DATA"};
     @:serialize public var enu:A = IntParam(5);
-    // @:serialize public var enu:A = Folded(Afo);
+    @:serialize public var fold:A ;
+    @:serialize public var dataEnum:A ;
     // @:serialize var fo:Folded = Afo;
 
     public function new() {}
@@ -92,7 +101,7 @@ enum Folded {
 enum A {
     IntParam(intVar:Int);
     StringPara(strVar:String);
-    // DataParam(data:DataParam);
+    DataParam(data:DataParam);
     Folded(a:Folded);
     // ClassParam(inst:Bar);
     C;

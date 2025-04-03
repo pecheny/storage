@@ -161,7 +161,7 @@ class SerializableMacro {
 
                     var stype = SerializerStorage.toSerializingType(ct, name, pos, ctx);
                     var sexprs = SerializerStorage.getSExpressions(stype);
-                    dumpExprs.push(macro Reflect.setField(data, $v{name}, ${sexprs.runtimeValueExpr(macro $i{name})}));
+                    dumpExprs.push(macro Reflect.setField(data, $v{name}, ${sexprs.runtimeValueExpr(macro this.$name)}));
                     loadExprs.push(sexprs.loadValueExpr(macro this.$name, sexprs.serializedValueExpr(name)));
                 case {meta: meta, pos: pos, name: name}:
                     if (meta?.filter(f -> f.name == ':serialize').length > 0)
