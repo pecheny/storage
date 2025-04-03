@@ -6,11 +6,12 @@ import haxe.macro.Type;
 import haxe.macro.Context;
 
 using haxe.macro.ComplexTypeTools;
+using haxe.macro.TypeTools;
 
 enum SerializingType {
     SClass(?ctr:Expr);
     SValue;
-    SEnum;
+    SEnum(et:EnumType);
     SMap;
     SArray(vtype:SerializingType);
     SFArray(vtype:SerializingType);
@@ -34,7 +35,6 @@ class SerializerStorage {
     static final singletones:Map<SerializingType, SerializableExprs> = [
         SClass(null) => new ClassSExprs(),
         SValue => new ValueSExprs(),
-        SEnum => new TinkSExprs(),
         SMap => new TinkSExprs()
     ];
 
@@ -43,8 +43,189 @@ class SerializerStorage {
             case SArray(vtype): new ArraySExprs(getSExpressions(vtype));
             case SFArray(vtype): new FixedArraySExprs(getSExpressions(vtype));
             case SClass(ctr): if (ctr != null) new ClassSExprs(ctr) else singletones[SClass(null)];
+            case SEnum(et): new EnumSExprs(et);
             case single: singletones[single];
         }
+    }
+
+    public static function toSerializingType(ct:ComplexType, name, pos, ctx:FieldConfig) {
+        return switch ct {
+            case null:
+                Context.error('Define explicit type for $name variable to be serialized', pos);
+            case macro :Int, macro :String, macro :Float, macro :Bool, TPath({name: "StdTypes", sub: "Int"}), TAnonymous(_):
+                SValue;
+            case TPath({name: 'Array', params: [TPType(cpt)]}):
+                // var cpta = ;
+                if (ctx.fixedArray) {
+                    SFArray(toSerializingType(cpt, name, pos, ctx));
+                } else {
+                    SArray(toSerializingType(cpt, name, pos, ctx));
+                }
+            case TPath(p):
+                var t:Type = ct.toType();
+                switch t.follow() {
+                    case TInst(_.get() => ct, params):
+                        if (ct.interfaces.filter(f -> f.t.get().name == "Serializable").length < 1)
+                            Context.error('${ct.name} doesnt implement Serializable, $t, ${t.follow()}', pos);
+                        SClass(ctx.itemCtr);
+                    case TEnum(_.get() => et, params):
+                        SEnum(et);
+                    case TType(_.get() => {name: "Map"}, params), TAbstract(_.get() => {name: "Map"}, params):
+                        SMap;
+                    case TAnonymous(a):
+                        SValue;
+                    case TAbstract(_.get() => at, params):
+                        // trace(ct, "\n",ct.toType(), "\n", macro : Int);
+                        // trace(at, at.type, params, at.resolve);
+                        var tf = t.followWithAbstracts();
+                        trace(ct, t, tf);
+                        // toSerializingType(tf.toComplexType(), name, pos, ctx);
+
+                        Context.error('Serialization of ${at.name} not supported', pos);
+                    case _:
+                        Context.error('Serialization of ${t + "\n flw: " + t.follow() + "\n ct: " + ct + "\n nam: " + name} not supported', pos);
+                }
+            case _:
+                Context.error('Serialization of $ct not supported', pos);
+        }
+    }
+}
+
+class ClassSExprs implements SerializableExprs {
+    var itemConstructorExpr:Expr;
+
+    public function new(itemConstructor:Expr = null) {
+        this.itemConstructorExpr = itemConstructor;
+    }
+
+    /** Returns an expression the value of which represents value from runtime to be serialized **/
+    public function runtimeValueExpr(name:Expr):Expr {
+        return macro $name.dump();
+    }
+
+    /** receives expression of "value extracted from data" and Returns an expression which put received value to the runtime instance **/
+    public function loadValueExpr(name:Expr, serializedValueExpr:Expr):Expr {
+        return macro $name.load($serializedValueExpr);
+    }
+
+    /** Assuming that data variable in the scope represents serialized dynamic structure, returns an expression the value of which should be assigned/put to runtime field **/
+    public function serializedValueExpr(name:String):Expr {
+        return macro Reflect.field(data, $v{name});
+    }
+
+    public function assertExpr(name:Expr):Null<Expr> {
+        if (itemConstructorExpr == null)
+            return macro null;
+        return macro if ($name == null) $name = $itemConstructorExpr;
+    }
+}
+
+typedef FieldConfig = {
+    ?itemCtr:Expr,
+    ?fixedArray:Bool
+}
+
+class SerializableMacro {
+    public static function build() {
+        var fields:Array<Field> = Context.getBuildFields();
+        var loadExprs = new MethodExprs(fields, "load");
+
+        loadExprs.addArg("data", macro :Dynamic);
+        var dumpExprs = new MethodExprs(fields, "dump");
+
+        dumpExprs.unshift(macro var data:Dynamic = {});
+        for (f in fields) {
+            switch f {
+                case {
+                    name: name,
+                    kind: FVar(ct),
+                    meta: [{name: ":serialize", params: params}],
+                    pos: pos
+                }, {
+                    name: name,
+                    kind: FProp(_, _, ct, _),
+                    meta: [{name: ":serialize", params: params}],
+                    pos: pos
+                }:
+                    var ctx = {};
+                    if (params != null)
+                        for (p in params) {
+                            switch p.expr {
+                                case EBinop(OpAssign, {expr: EConst(CIdent(prop))}, macro true):
+                                    Reflect.setField(ctx, prop, true);
+                                case EBinop(OpAssign, {expr: EConst(CIdent(prop))}, e2):
+                                    Reflect.setField(ctx, prop, e2);
+                                case _:
+                            }
+                        }
+
+                    var stype = SerializerStorage.toSerializingType(ct, name, pos, ctx);
+                    var sexprs = SerializerStorage.getSExpressions(stype);
+                    dumpExprs.push(macro Reflect.setField(data, $v{name}, ${sexprs.runtimeValueExpr(macro $i{name})}));
+                    loadExprs.push(sexprs.loadValueExpr(macro this.$name, sexprs.serializedValueExpr(name)));
+                case {meta: meta, pos: pos, name: name}:
+                    if (meta?.filter(f -> f.name == ':serialize').length > 0)
+                        Context.error('Serialization of $name not supported', pos);
+                case _:
+            }
+        }
+        dumpExprs.push(macro return data);
+        return fields;
+    }
+}
+
+class MethodExprs {
+    var args:Array<FunctionArg> = [];
+    var exprs:Array<Expr> = [];
+
+    var found = false;
+
+    public function new(fields:Array<Field>, name) {
+        for (f in fields) {
+            if (f.name != name)
+                continue;
+            switch f {
+                case {
+                    kind: FFun({
+                        args: args,
+                        expr: {expr: EBlock(exprs)}
+                    }),
+                }:
+                    this.exprs = exprs;
+                    this.args = args;
+                    found = true;
+                    break;
+                case {
+                    pos: pos
+                }:
+                    Context.error('Wrong $name() signature for Serializable ', pos);
+                case _:
+            }
+        }
+        if (!found)
+            fields.push({
+                name: name,
+                access: [APublic],
+                kind: FFun({
+                    args: this.args,
+                    expr: {expr: EBlock(this.exprs), pos: Context.currentPos()}
+                }),
+                pos: Context.currentPos()
+            });
+    }
+
+    public function push(e) {
+        exprs.push(e);
+    }
+
+    public function unshift(e) {
+        exprs.unshift(e);
+    }
+
+    public function addArg(name, type) {
+        if (found)
+            return;
+        args.push({name: name, type: type});
     }
 }
 
@@ -127,6 +308,138 @@ class ArraySExprs implements SerializableExprs {
     }
 }
 
+class EnumSExprs implements SerializableExprs {
+    var et:EnumType;
+    var runtimeCases:Array<Case> = [];
+    var deserializeExprs:Array<Expr> = [];
+
+    // var contetn:Map<String,
+    public function new(et) {
+        // var mcsw = macro switch v {
+        //     case B(n):trace(n);
+        // }
+        // switch mcsw.expr {
+        //     case ESwitch(e, cases, edef):
+        //         trace('e: $e');
+        //         trace('cases: $cases');
+        //         for (c in cases) {
+        //             trace('c.expr \n', c.expr, "\n\n");
+        //             for (v in c.values)
+        //                 trace("val expr: ", v.expr, "\n\n");
+
+        //         }
+
+        //     case _:
+        // }
+
+        var e = macro {b: 5};
+        switch e.expr {
+            case EConst(c):
+                trace(c);
+            case _:
+                trace(e.expr);
+        }
+
+        this.et = et;
+        for (ctr in et.constructs) {
+            // trace("T: ", ctr.type, "\n\n");
+            switch ctr.type {
+                case TFun(args, ret):
+                    runtimeCases.push({
+                        values: [macro $i{ctr.name}($a{args.map(a -> macro $i{a.name})})],
+                        expr: objDecl([
+                            {name: ctr.name, expr: objDecl(args.map(a -> {name: a.name, expr: getValueExpr(a.t, a.name)}))}
+                        ])
+                    });
+                    deserializeExprs.push(macro {});
+                case TEnum(t, params):
+                    runtimeCases.push({
+                        values: [macro $i{ctr.name}],
+                        expr: objDecl([{name: ctr.name, expr: objDecl([])}])
+                    });
+
+                case _:
+                    throw ctr.type;
+            }
+            // trace(ctr.)
+        }
+    }
+
+    function getValueExpr(t:Type, name:String) {
+        var st = SerializerStorage.toSerializingType(t.toComplexType(), 'Within Enum ${et.name}', Context.currentPos(), {});
+        var se = SerializerStorage.getSExpressions(st);
+        return se.runtimeValueExpr(macro cast $i{name});
+    }
+
+    function objDecl(fields:Array<{name:String, expr:Expr}>) {
+        var expr = {
+            expr: EObjectDecl(fields.map(a -> {quotes: Unquoted, field: a.name, expr: a.expr})),
+            pos: Context.currentPos(),
+        }
+        return macro cast $expr;
+    }
+
+    /** Returns an expression the value of which represents value from runtime to be serialized **/
+    public function runtimeValueExpr(name:Expr):Expr {
+        return {
+            expr: ESwitch(macro $name, runtimeCases, macro throw "Wrong"),
+            pos: Context.currentPos(),
+        }
+    }
+
+    /** receives expression of "value extracted from data" and Returns an expression which put received value to the runtime instance **/
+    public function loadValueExpr(name:Expr, serializedValueExpr:Expr):Expr {
+        return macro $name = $serializedValueExpr;
+    }
+
+    /** Assuming that data variable in the scope represents serialized dynamic structure, returns an expression the value of which should be assigned/put to runtime field **/
+    public function serializedValueExpr(name:String):Expr {
+        var exprs = [];
+        exprs.push(macro var enumData:Dynamic = Reflect.field(data, $v{name}));
+        var deserializeExprs = [];
+        deserializeExprs.push(macro var result = null);
+
+        trace([for (k in et.constructs.keys()) k]);
+        for (ctr in et.constructs) {
+            trace("processing " + ctr.name);
+            switch ctr.type {
+                case TFun(args, ret):
+                    trace("TFun");
+                    // runtimeCases.push({
+                    //     values: [macro $i{ctr.name}($a{args.map(a -> macro $i{a.name})})],
+                    //     expr: objDecl([{name:ctr.name, expr:objDecl(args.map(a -> {name:a.name, expr: getValueExpr(a.t, a.name) }))}])
+                    // });
+                    var ctargs = [];
+                    for (a in args) {
+                        var st = SerializerStorage.toSerializingType(a.t.toComplexType(), '${a.name} in ctr.name', Context.currentPos(), {});
+                        var et = SerializerStorage.getSExpressions(st);
+                        ctargs.push(et.serializedValueExpr(a.name));
+                    }
+
+                    deserializeExprs.push(macro if (Reflect.hasField(enumData, $v{ctr.name})) {
+                        var data = Reflect.field(enumData, $v{ctr.name});
+                        result = cast $i{ctr.name}($a{ctargs});
+                    });
+                case TEnum(t, params):
+                    trace("TEnum");
+                    deserializeExprs.push(macro if (Reflect.hasField(enumData, $v{ctr.name})) result = cast $i{ctr.name});
+
+                case _:
+                    throw ctr.type;
+            }
+        }
+
+        deserializeExprs.push(macro if (result == null) throw 'Can`t deserealize ' + enumData + ' to ' + $v{name});
+        deserializeExprs.push(macro result);
+
+        return macro $b{exprs.concat(deserializeExprs)};
+    }
+
+    public function assertExpr(name:Expr):Null<Expr> {
+        return macro cast "ass";
+    }
+}
+
 class TinkSExprs implements SerializableExprs {
     public function new() {}
 
@@ -170,176 +483,6 @@ class ValueSExprs implements SerializableExprs {
 
     public function assertExpr(name:Expr):Null<Expr> {
         return macro null;
-    }
-}
-
-class ClassSExprs implements SerializableExprs {
-    var itemConstructorExpr:Expr;
-
-    public function new(itemConstructor:Expr = null) {
-        this.itemConstructorExpr = itemConstructor;
-    }
-
-    /** Returns an expression the value of which represents value from runtime to be serialized **/
-    public function runtimeValueExpr(name:Expr):Expr {
-        return macro $name.dump();
-    }
-
-    /** receives expression of "value extracted from data" and Returns an expression which put received value to the runtime instance **/
-    public function loadValueExpr(name:Expr, serializedValueExpr:Expr):Expr {
-        return macro $name.load($serializedValueExpr);
-    }
-
-    /** Assuming that data variable in the scope represents serialized dynamic structure, returns an expression the value of which should be assigned/put to runtime field **/
-    public function serializedValueExpr(name:String):Expr {
-        return macro Reflect.field(data, $v{name});
-    }
-
-    public function assertExpr(name:Expr):Null<Expr> {
-        if (itemConstructorExpr == null)
-            return macro null;
-        return macro if ($name == null) $name = $itemConstructorExpr;
-    }
-}
-
-typedef FieldConfig = {
-    ?itemCtr:Expr,
-    ?fixedArray:Bool
-}
-
-class SerializableMacro {
-    public static function build() {
-        function toSerializingType(ct:ComplexType, name, pos, ctx:FieldConfig) {
-            return switch ct {
-                case null:
-                    Context.error('Define explicit type for $name variable to be serialized', pos);
-                case macro :Int, macro :String, macro :Float, macro :Bool:
-                    SValue;
-                case TPath({name: 'Array', params: [TPType(cpt)]}):
-                    if (ctx.fixedArray) {
-                        SFArray(toSerializingType(cpt, name, pos, ctx));
-                    } else {
-                        SArray(toSerializingType(cpt, name, pos, ctx));
-                    }
-                case TPath(p):
-                    var t:Type = ct.toType();
-                    switch t {
-                        case TInst(_.get() => ct, params):
-                            if (ct.interfaces.filter(f -> f.t.get().name == "Serializable").length < 1)
-                                Context.error('${ct.name} doesnt implement Serializable', pos);
-                            SClass(ctx.itemCtr);
-                        case TEnum(t, params):
-                            SEnum;
-                        case TType(_.get() => {name: "Map"}, params):
-                            SMap;
-                        case _:
-                            Context.error('Serialization of $t not supported', pos);
-                    }
-                case _:
-                    Context.error('Serialization of $ct not supported', pos);
-            }
-        }
-
-        var fields:Array<Field> = Context.getBuildFields();
-        var loadExprs = new MethodExprs(fields, "load");
-
-        loadExprs.addArg("data", macro :Dynamic);
-        var dumpExprs = new MethodExprs(fields, "dump");
-
-        dumpExprs.unshift(macro var data = {});
-        for (f in fields) {
-            switch f {
-                case {
-                    name: name,
-                    kind: FVar(ct),
-                    meta: [{name: ":serialize", params: params}],
-                    pos: pos
-                }, {
-                    name: name,
-                    kind: FProp(_, _, ct, _),
-                    meta: [{name: ":serialize", params: params}],
-                    pos: pos
-                }:
-                    var ctx = {};
-                    if (params != null)
-                        for (p in params) {
-                            switch p.expr {
-                                case EBinop(OpAssign, {expr: EConst(CIdent(prop))}, macro true):
-                                    Reflect.setField(ctx, prop, true);
-                                case EBinop(OpAssign, {expr: EConst(CIdent(prop))}, e2):
-                                    Reflect.setField(ctx, prop, e2);
-                                case _:
-                            }
-                        }
-
-                    var stype = toSerializingType(ct, name, pos, ctx);
-                    var sexprs = SerializerStorage.getSExpressions(stype);
-                    dumpExprs.push(macro Reflect.setField(data, $v{name}, ${sexprs.runtimeValueExpr(macro $i{name})}));
-                    loadExprs.push(sexprs.loadValueExpr(macro $i{name}, sexprs.serializedValueExpr(name)));
-                case {meta: meta, pos: pos, name: name}:
-                    if (meta?.filter(f -> f.name == ':serialize').length > 0)
-                        Context.error('Serialization of $name not supported', pos);
-                case _:
-            }
-        }
-        dumpExprs.push(macro return data);
-        return fields;
-    }
-}
-
-class MethodExprs {
-    var args:Array<FunctionArg> = [];
-    var exprs:Array<Expr> = [];
-
-    var found = false;
-
-    public function new(fields:Array<Field>, name) {
-        for (f in fields) {
-            if (f.name != name)
-                continue;
-            switch f {
-                case {
-                    access: [APublic],
-                    kind: FFun({
-                        args: args,
-                        expr: {expr: EBlock(exprs)}
-                    }),
-                }:
-                    this.exprs = exprs;
-                    this.args = args;
-                    found = true;
-                    break;
-                case {
-                    pos: pos
-                }:
-                    Context.error('Wrong $name() signature for Serializable ', pos);
-                case _:
-            }
-        }
-        if (!found)
-            fields.push({
-                name: name,
-                access: [APublic],
-                kind: FFun({
-                    args: this.args,
-                    expr: {expr: EBlock(this.exprs), pos: Context.currentPos()}
-                }),
-                pos: Context.currentPos()
-            });
-    }
-
-    public function push(e) {
-        exprs.push(e);
-    }
-
-    public function unshift(e) {
-        exprs.unshift(e);
-    }
-
-    public function addArg(name, type) {
-        if (found)
-            return;
-        args.push({name: name, type: type});
     }
 }
 #end

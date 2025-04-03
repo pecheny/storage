@@ -1,0 +1,8 @@
+-lib utest
+-lib tink_json
+-cp ./src
+-cp ./test
+# -x Main
+--main TestAll
+-D UTEST_FAILURE_THROW
+-D dump=pretty

@@ -49,15 +49,32 @@ class Foo implements Serializable {
     @:serialize public var map:Map<String, String> = ["key" => "val"];
     @:serialize(itemCtr = new Bar()) public var bars:Array<Bar> = [];
     @:serialize(fixedArray = true) public var fixedBars:Array<Bar> = [new Bar()];
+    @:serialize var data:DataParam = {value:"DATA"};
 
-    @:serialize public var enu:A = B(5);
+    @:serialize public var enu:A = IntParam(5);
+    // @:serialize public var enu:A = Folded(Afo);
+
+    // @:serialize var fo:Folded = Afo;
 
     public function new() {}
 }
 
+typedef DataParam = {
+    value:String,
+}
+
 enum A {
-    B(i:Int);
-    @:json("C") C;
+    IntParam(intVar:Int);
+    StringPara(strVar:String);
+    DataParam(data:DataParam);
+    Folded(a:Folded);
+    // ClassParam(inst:Bar);
+    C;
+}
+
+enum Folded {
+    Afo(v:String);
+    Bfo;
 }
 
 class Bar implements Serializable {
