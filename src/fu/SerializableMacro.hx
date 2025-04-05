@@ -291,7 +291,6 @@ class ArraySExprs implements SerializableExprs {
 
     /** Returns an expression the value of which represents value from runtime to be serialized **/
     public function runtimeValueExpr(name:Expr):Expr {
-        // return macro [for (rv in macro $name) macro ${valueExprs.runtimeValueExpr(macro $i{"rv"})}];
         return macro $name.copy();
     }
 
@@ -324,36 +323,9 @@ class EnumSExprs implements SerializableExprs {
     var runtimeCases:Array<Case> = [];
     var deserializeExprs:Array<Expr> = [];
 
-    // var contetn:Map<String,
     public function new(et) {
-        // var mcsw = macro switch v {
-        //     case B(n):trace(n);
-        // }
-        // switch mcsw.expr {
-        //     case ESwitch(e, cases, edef):
-        //         trace('e: $e');
-        //         trace('cases: $cases');
-        //         for (c in cases) {
-        //             trace('c.expr \n', c.expr, "\n\n");
-        //             for (v in c.values)
-        //                 trace("val expr: ", v.expr, "\n\n");
-
-        //         }
-
-        //     case _:
-        // }
-
-        var e = macro {b: 5};
-        switch e.expr {
-            case EConst(c):
-                trace(c);
-            case _:
-                trace(e.expr);
-        }
-
         this.et = et;
         for (ctr in et.constructs) {
-            // trace("T: ", ctr.type, "\n\n");
             switch ctr.type {
                 case TFun(args, ret):
                     runtimeCases.push({
@@ -372,7 +344,6 @@ class EnumSExprs implements SerializableExprs {
                 case _:
                     throw ctr.type;
             }
-            // trace(ctr.)
         }
     }
 
@@ -410,16 +381,9 @@ class EnumSExprs implements SerializableExprs {
         var deserializeExprs = [];
         deserializeExprs.push(macro var result = null);
 
-        trace([for (k in et.constructs.keys()) k]);
         for (ctr in et.constructs) {
-            trace("processing " + ctr.name);
             switch ctr.type {
                 case TFun(args, ret):
-                    trace("TFun");
-                    // runtimeCases.push({
-                    //     values: [macro $i{ctr.name}($a{args.map(a -> macro $i{a.name})})],
-                    //     expr: objDecl([{name:ctr.name, expr:objDecl(args.map(a -> {name:a.name, expr: getValueExpr(a.t, a.name) }))}])
-                    // });
                     var ctargs = [];
                     for (a in args) {
                         var st = SerializerStorage.toSerializingType(a.t.toComplexType(), '${a.name} in ctr.name', Context.currentPos(), {});
@@ -432,9 +396,7 @@ class EnumSExprs implements SerializableExprs {
                         result = cast $i{ctr.name}($a{ctargs});
                     });
                 case TEnum(t, params):
-                    trace("TEnum");
                     deserializeExprs.push(macro if (Reflect.hasField(enumData, $v{ctr.name})) result = cast $i{ctr.name});
-
                 case _:
                     throw ctr.type;
             }
