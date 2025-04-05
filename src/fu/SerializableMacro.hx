@@ -141,7 +141,7 @@ class SerializableMacro {
         var loadExprs = new MethodExprs(fields, "load");
 
         loadExprs.addArg("data", macro :Dynamic);
-        var dumpExprs = new MethodExprs(fields, "dump");
+        var dumpExprs = new MethodExprs(fields, "dump", macro : Dynamic);
 
         dumpExprs.unshift(macro var data:Dynamic = {});
         for (f in fields) {
@@ -190,7 +190,7 @@ class MethodExprs {
 
     var found = false;
 
-    public function new(fields:Array<Field>, name) {
+    public function new(fields:Array<Field>, name, ?ret:ComplexType) {
         for (f in fields) {
             if (f.name != name)
                 continue;
@@ -218,6 +218,7 @@ class MethodExprs {
                 access: [APublic],
                 kind: FFun({
                     args: this.args,
+                    ret: ret,
                     expr: {expr: EBlock(this.exprs), pos: Context.currentPos()}
                 }),
                 pos: Context.currentPos()
