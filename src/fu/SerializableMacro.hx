@@ -48,6 +48,8 @@ class SerializerStorage {
         }
     }
 
+    static final supported_underlyings = ["String", "Int", "Float", "Bool"];
+
     public static function toSerializingType(ct:ComplexType, name, pos, ctx:FieldConfig) {
         return switch ct {
             case null:
@@ -55,7 +57,6 @@ class SerializerStorage {
             case macro :Int, macro :String, macro :Float, macro :Bool, TPath({name: "StdTypes", sub: "Int"}), TAnonymous(_):
                 SValue;
             case TPath({name: 'Array', params: [TPType(cpt)]}):
-                // var cpta = ;
                 if (ctx.fixedArray) {
                     SFArray(toSerializingType(cpt, name, pos, ctx));
                 } else {
@@ -64,9 +65,15 @@ class SerializerStorage {
             case TPath(p):
                 var t:Type = ct.toType();
                 switch t.follow() {
+                    case TInst(_.get() => {name: "Array"}, [cpt]):
+                        if (ctx.fixedArray) {
+                            SFArray(toSerializingType(cpt.toComplexType(), name, pos, ctx));
+                        } else {
+                            SArray(toSerializingType(cpt.toComplexType(), name, pos, ctx));
+                        }
                     case TInst(_.get() => ct, params):
                         if (ct.interfaces.filter(f -> f.t.get().name == "Serializable").length < 1)
-                            Context.error('${ct.name} doesnt implement Serializable, $t, ${t.follow()}', pos);
+                            Context.error('${ct.name} doesnt implement Serializable, $t, ${t.follow()},\n\n\n\n $p', pos);
                         SClass(ctx.itemCtr);
                     case TEnum(_.get() => et, params):
                         SEnum(et);
@@ -75,13 +82,16 @@ class SerializerStorage {
                     case TAnonymous(a):
                         SValue;
                     case TAbstract(_.get() => at, params):
-                        // trace(ct, "\n",ct.toType(), "\n", macro : Int);
-                        // trace(at, at.type, params, at.resolve);
-                        var tf = t.followWithAbstracts();
-                        trace(ct, t, tf);
-                        // toSerializingType(tf.toComplexType(), name, pos, ctx);
-
-                        Context.error('Serialization of ${at.name} not supported', pos);
+                        switch at.type {
+                            case TInst(_.get().name => under, params) if (supported_underlyings.indexOf(under) > -1):
+                                SValue;
+                            case _:
+                                var tf = t.followWithAbstracts();
+                                trace(ct, t, tf, at.type);
+                                Context.error('Serialization of ${at.name} not supported', pos);
+                        }
+                    // trace(ct, "\n",ct.toType(), "\n", macro : Int);
+                    // trace(at, at.type, params, at.resolve);
                     case _:
                         Context.error('Serialization of ${t + "\n flw: " + t.follow() + "\n ct: " + ct + "\n nam: " + name} not supported', pos);
                 }

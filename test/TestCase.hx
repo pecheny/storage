@@ -83,10 +83,14 @@ class Foo implements Serializable {
     @:serialize public var enu:A = IntParam(5);
     @:serialize public var fold:A ;
     @:serialize public var dataEnum:A ;
+    @:serialize public var abstr:DialogUri = "dialog";
+    
     // @:serialize var fo:Folded = Afo;
 
     public function new() {}
 }
+
+abstract DialogUri(String) to String from String {}
 
 typedef DataParam = {
     value:String,
