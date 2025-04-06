@@ -4,9 +4,11 @@ package fu;
 import haxe.macro.Expr;
 import haxe.macro.Type;
 import haxe.macro.Context;
+import fu.macros.FieldUtils;
 
 using haxe.macro.ComplexTypeTools;
 using haxe.macro.TypeTools;
+using fu.macros.FieldUtils;
 
 enum SerializingType {
     SClass(?ctr:Expr);
@@ -138,12 +140,12 @@ typedef FieldConfig = {
 class SerializableMacro {
     public static function build() {
         var fields:Array<Field> = Context.getBuildFields();
-        var loadExprs = new MethodExprs(fields, "load");
-
+        var lc = Context.getLocalClass().get();
+        var hasSerializing = false;
+        var loadExprs = new MethodExprs(fields, lc, "load");
         loadExprs.addArg("data", macro :Dynamic);
-        var dumpExprs = new MethodExprs(fields, "dump", macro : Dynamic);
+        var dumpExprs = new MethodExprs(fields, lc, "dump", macro :Dynamic);
 
-        dumpExprs.unshift(macro var data:Dynamic = {});
         for (f in fields) {
             switch f {
                 case {
@@ -157,6 +159,7 @@ class SerializableMacro {
                     meta: [{name: ":serialize", params: params}],
                     pos: pos
                 }:
+                    hasSerializing = true;
                     var ctx = {};
                     if (params != null)
                         for (p in params) {
@@ -179,7 +182,19 @@ class SerializableMacro {
                 case _:
             }
         }
-        dumpExprs.push(macro return data);
+
+        if (dumpExprs.hasSuper)
+            dumpExprs.unshift(macro var data:Dynamic = __ret__);
+        else {
+            dumpExprs.unshift(macro __ret__ = data);
+            dumpExprs.unshift(macro var data:Dynamic = {});
+        }
+
+        if (hasSerializing || !FieldUtils.hasField("load"))
+            loadExprs.finalize();
+        if (hasSerializing || !FieldUtils.hasField("dump"))
+            dumpExprs.finalize();
+
         return fields;
     }
 }
@@ -187,10 +202,18 @@ class SerializableMacro {
 class MethodExprs {
     var args:Array<FunctionArg> = [];
     var exprs:Array<Expr> = [];
-
+    var fields:Array<Field>;
     var found = false;
+    var name:String;
+    var ret:ComplexType;
 
-    public function new(fields:Array<Field>, name, ?ret:ComplexType) {
+    public var hasSuper(default, null) = false;
+
+    public function new(fields:Array<Field>, lc, name, ?ret:ComplexType) {
+        this.name = name;
+        this.ret = ret;
+        this.fields = fields;
+        hasSuper = (FieldUtils.hasFieldInClassType(lc.superClass?.t.get(), name));
         for (f in fields) {
             if (f.name != name)
                 continue;
@@ -212,10 +235,28 @@ class MethodExprs {
                 case _:
             }
         }
+    }
+
+    public function finalize() {
+        var access = [APublic];
+        if (hasSuper) {
+            access.push(AOverride);
+            if (ret != null)
+                exprs.unshift(macro var __ret__ = $p{["super", name]}($a{args.map(ar -> macro $i{ar.name})}));
+            else
+                exprs.unshift(macro $p{["super", name]}($a{args.map(ar -> macro $i{ar.name})}));
+        } else {
+            if (ret != null)
+                exprs.unshift(macro var __ret__: $ret);
+        }
+
+        if (ret != null)
+            exprs.push(macro return __ret__);
+
         if (!found)
             fields.push({
                 name: name,
-                access: [APublic],
+                access: access,
                 kind: FFun({
                     args: this.args,
                     ret: ret,
