@@ -50,8 +50,6 @@ class SerializerStorage {
         }
     }
 
-    static final supported_underlyings = ["String", "Int", "Float", "Bool"];
-
     public static function toSerializingType(ct:ComplexType, name, pos, ctx:FieldConfig) {
         return switch ct {
             case null:
@@ -174,17 +172,20 @@ class SerializableMacro {
             }
         }
 
-        if (dumpExprs.hasSuper)
-            dumpExprs.unshift(macro var data:Dynamic = __ret__);
-        else {
-            dumpExprs.unshift(macro __ret__ = data);
-            dumpExprs.unshift(macro var data:Dynamic = {});
+        var dumpRequired = hasSerializing || dumpExprs.found || !dumpExprs.hasSuper;
+        if (dumpRequired) {
+            if (dumpExprs.hasSuper)
+                dumpExprs.unshift(macro var data:Dynamic = __ret__);
+            else {
+                dumpExprs.unshift(macro __ret__ = data);
+                dumpExprs.unshift(macro var data:Dynamic = {});
+            }
+            dumpExprs.finalize();
         }
 
-        if (hasSerializing || !FieldUtils.hasField("load"))
+        var loadRequired = hasSerializing || loadExprs.found || !dumpExprs.hasSuper;
+        if (loadRequired)
             loadExprs.finalize();
-        if (hasSerializing || !FieldUtils.hasField("dump"))
-            dumpExprs.finalize();
 
         return fields;
     }
@@ -194,10 +195,10 @@ class MethodExprs {
     var args:Array<FunctionArg> = [];
     var exprs:Array<Expr> = [];
     var fields:Array<Field>;
-    var found = false;
     var name:String;
     var ret:ComplexType;
 
+    public var found(default, null) = false;
     public var hasSuper(default, null) = false;
 
     public function new(fields:Array<Field>, lc, name, ?ret:ComplexType) {
@@ -238,7 +239,7 @@ class MethodExprs {
                 exprs.unshift(macro $p{["super", name]}($a{args.map(ar -> macro $i{ar.name})}));
         } else {
             if (ret != null)
-                exprs.unshift(macro var __ret__: $ret);
+                exprs.unshift(macro var __ret__:$ret);
         }
 
         if (ret != null)
