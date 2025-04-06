@@ -84,6 +84,7 @@ class Foo implements Serializable {
     @:serialize public var fold:A ;
     @:serialize public var dataEnum:A ;
     @:serialize public var abstr:DialogUri = "dialog";
+    @:serialize public var roomEnumAbstract:DummyRoomType = red;
     
     // @:serialize var fo:Folded = Afo;
 
@@ -91,6 +92,11 @@ class Foo implements Serializable {
 }
 
 abstract DialogUri(String) to String from String {}
+
+enum abstract DummyRoomType(Int) to Int {
+    var red = 0xa03030;
+    var green = 0x30a044;
+}
 
 typedef DataParam = {
     value:String,

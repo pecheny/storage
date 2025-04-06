@@ -84,16 +84,7 @@ class SerializerStorage {
                     case TAnonymous(a):
                         SValue;
                     case TAbstract(_.get() => at, params):
-                        switch at.type {
-                            case TInst(_.get().name => under, params) if (supported_underlyings.indexOf(under) > -1):
-                                SValue;
-                            case _:
-                                var tf = t.followWithAbstracts();
-                                trace(ct, t, tf, at.type);
-                                Context.error('Serialization of ${at.name} not supported', pos);
-                        }
-                    // trace(ct, "\n",ct.toType(), "\n", macro : Int);
-                    // trace(at, at.type, params, at.resolve);
+                        toSerializingType(at.type.followWithAbstracts().toComplexType(), name, pos, ctx);
                     case _:
                         Context.error('Serialization of ${t + "\n flw: " + t.follow() + "\n ct: " + ct + "\n nam: " + name} not supported', pos);
                 }
