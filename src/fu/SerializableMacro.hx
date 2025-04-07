@@ -123,6 +123,7 @@ class ClassSExprs implements SerializableExprs {
 
 typedef FieldConfig = {
     ?itemCtr:Expr,
+    ?skipNullLoad:Bool,
     ?fixedArray:Bool
 }
 
@@ -164,7 +165,10 @@ class SerializableMacro {
                     var stype = SerializerStorage.toSerializingType(ct, name, pos, ctx);
                     var sexprs = SerializerStorage.getSExpressions(stype);
                     dumpExprs.push(macro Reflect.setField(data, $v{name}, ${sexprs.runtimeValueExpr(macro this.$name)}));
-                    loadExprs.push(sexprs.loadValueExpr(macro this.$name, sexprs.serializedValueExpr(name)));
+                    var loadAndAssignExp = sexprs.loadValueExpr(macro this.$name, sexprs.serializedValueExpr(name)) ;
+                    if (ctx.skipNullLoad)
+                        loadAndAssignExp = macro if (Reflect.hasField(data, $v{name})) $loadAndAssignExp;
+                    loadExprs.push(loadAndAssignExp);
                 case {meta: meta, pos: pos, name: name}:
                     if (meta?.filter(f -> f.name == ':serialize').length > 0)
                         Context.error('Serialization of $name not supported', pos);
