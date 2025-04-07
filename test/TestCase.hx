@@ -22,7 +22,8 @@ class TestCase extends utest.Test {
             "dataEnum": { "DataParam":{"data":{"value": "NEW DATA"}}},
             "boolVar": false,
             "fixedBars": [{ "stringVar": "fixed", "strings": [["foo", "bar"]] }],
-            "bars": [{ "stringVar": "ttt", "strings": [["foo", "bar"]] }]
+            "bars": [{ "stringVar": "ttt", "strings": [["foo", "bar"]] }],
+             "tdTomap" : [["Bar",2]]
         }';
         var deser = Json.parse(data);
 
@@ -38,6 +39,8 @@ class TestCase extends utest.Test {
 
     function specMap() {
         foo.map["key"] == "newVal";
+        foo.tdTomap.exists("Foo") == false;
+        foo.tdTomap.get("Bar") == 2;
     }
 
     function specClass() {
@@ -67,6 +70,7 @@ class TestCase extends utest.Test {
     }
     
     
+    
 }
 
 class Foo implements Serializable {
@@ -85,11 +89,15 @@ class Foo implements Serializable {
     @:serialize public var dataEnum:A ;
     @:serialize public var abstr:DialogUri = "dialog";
     @:serialize public var roomEnumAbstract:DummyRoomType = red;
+    @:serialize(skipNullLoad=true) public var tdTomap:ToMap = ["Foo" => 1];
+    @:serialize(skipNullLoad=true) public var arrtdTomap:Array<ToMap> = [];
     
     // @:serialize var fo:Folded = Afo;
 
     public function new() {}
 }
+
+typedef ToMap = Map<String, Int>;
 
 abstract DialogUri(String) to String from String {}
 

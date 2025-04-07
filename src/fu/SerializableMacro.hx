@@ -14,7 +14,7 @@ enum SerializingType {
     SClass(?ctr:Expr);
     SValue;
     SEnum(et:EnumType);
-    SMap;
+    SMap(vtype:SerializingType);
     SArray(vtype:SerializingType);
     SFArray(vtype:SerializingType);
 }
@@ -37,12 +37,13 @@ class SerializerStorage {
     static final singletones:Map<SerializingType, SerializableExprs> = [
         SClass(null) => new ClassSExprs(),
         SValue => new ValueSExprs(),
-        SMap => new TinkSExprs()
+        // SMap => new MapSExprs()
     ];
 
     public static function getSExpressions(type:SerializingType):SerializableExprs {
         return switch type {
             case SArray(vtype): new ArraySExprs(getSExpressions(vtype));
+            case SMap(vtype): new MapSExprs(getSExpressions(vtype));
             case SFArray(vtype): new FixedArraySExprs(getSExpressions(vtype));
             case SClass(ctr): if (ctr != null) new ClassSExprs(ctr) else singletones[SClass(null)];
             case SEnum(et): new EnumSExprs(et);
@@ -78,7 +79,7 @@ class SerializerStorage {
                     case TEnum(_.get() => et, params):
                         SEnum(et);
                     case TType(_.get() => {name: "Map"}, params), TAbstract(_.get() => {name: "Map"}, params):
-                        SMap;
+                        SMap(toSerializingType(params[1].toComplexType(), name, pos, ctx));
                     case TAnonymous(a):
                         SValue;
                     case TAbstract(_.get() => at, params):
@@ -316,6 +317,48 @@ class FixedArraySExprs implements SerializableExprs {
         return macro null;
     }
 }
+class MapSExprs implements SerializableExprs {
+    static var jPostfix = 0;
+
+    var valueExprs:SerializableExprs;
+
+    public function new(valueExprs) {
+        this.valueExprs = valueExprs;
+    }
+
+    /** Returns an expression the value of which represents value from runtime to be serialized **/
+    public function runtimeValueExpr(name:Expr):Expr {
+        var itemExpr = macro $name.get(__k);
+        return macro [for (__k in $name.keys()) [__k, ${valueExprs.runtimeValueExpr(itemExpr)}]];
+    }
+
+    /** receives expression of "value extracted from data" and Returns an expression which put received value to the runtime instance 
+        name is expr of runtime array, serializedValueExpr is expr of array contains serialized item representations.
+    **/
+    public function loadValueExpr(name:Expr, serializedValueExpr:Expr):Expr {
+        return macro {
+            $name.clear();
+            var data:Array<Dynamic> = $serializedValueExpr; 
+            for ($i{"j" + ++jPostfix} in 0...data.length) {
+                var pair:Array<Dynamic> = data[$i{"j" + jPostfix}];
+                var value:Dynamic;
+                ${valueExprs.assertExpr(macro value)};
+                ${valueExprs.loadValueExpr(macro value, macro pair[1])};
+                $name.set(pair[0], value);
+            }
+        }
+    }
+
+    /** Assuming that data variable in the scope represents serialized dynamic structure, returns an expression the value of which should be assigned/put to runtime field **/
+    public function serializedValueExpr(name:String):Expr {
+        return macro Reflect.field(data, $v{name});
+    }
+
+    public function assertExpr(name:Expr):Null<Expr> {
+        return macro if ($name == null) $name = new Map();
+}
+}
+
 
 class ArraySExprs implements SerializableExprs {
     static var jPostfix = 0;
