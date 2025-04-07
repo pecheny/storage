@@ -29,6 +29,16 @@ class FieldUtils {
         return false;
     }
 
+    public static function implementz(ct:ClassType, name) {
+        if (ct.interfaces.filter(f -> f.t.get().name == name).length > 0)
+            return true;
+
+        if (ct.superClass != null)
+            return implementz(ct.superClass.t.get(), name);
+
+        return false;
+    }
+
     public static function addField(fields:Array<Field>, name, type, ?e) {
         if (!hasField(name))
             fields.push({

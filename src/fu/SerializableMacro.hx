@@ -72,7 +72,7 @@ class SerializerStorage {
                             SArray(toSerializingType(cpt.toComplexType(), name, pos, ctx));
                         }
                     case TInst(_.get() => ct, params):
-                        if (ct.interfaces.filter(f -> f.t.get().name == "Serializable").length < 1)
+                        if (!FieldUtils.implementz (ct, "Serializable"))
                             Context.error('${ct.name} doesnt implement Serializable, $t, ${t.follow()},\n\n\n\n $p', pos);
                         SClass(ctx.itemCtr);
                     case TEnum(_.get() => et, params):
