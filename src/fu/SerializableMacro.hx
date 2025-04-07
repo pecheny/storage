@@ -292,7 +292,7 @@ class FixedArraySExprs implements SerializableExprs {
 
     /** Returns an expression the value of which represents value from runtime to be serialized **/
     public function runtimeValueExpr(name:Expr):Expr {
-        return macro $name.copy();
+        return macro [for (v in $name) ${valueExprs.runtimeValueExpr(macro v)}];
     }
 
     /** receives expression of "value extracted from data" and Returns an expression which put received value to the runtime instance 
@@ -328,7 +328,7 @@ class ArraySExprs implements SerializableExprs {
 
     /** Returns an expression the value of which represents value from runtime to be serialized **/
     public function runtimeValueExpr(name:Expr):Expr {
-        return macro $name.copy();
+        return macro [for (v in $name) ${valueExprs.runtimeValueExpr(macro v)}];
     }
 
     /** receives expression of "value extracted from data" and Returns an expression which put received value to the runtime instance 
