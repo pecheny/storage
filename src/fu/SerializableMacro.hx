@@ -14,7 +14,7 @@ enum SerializingType {
     SClass(?ctr:Expr);
     SValue;
     SEnum(et:EnumType);
-    SMap(vtype:SerializingType);
+    SMap(vtype:SerializingType, ktype:ComplexType);
     SArray(vtype:SerializingType);
     SFArray(vtype:SerializingType);
 }
@@ -43,7 +43,7 @@ class SerializerStorage {
     public static function getSExpressions(type:SerializingType):SerializableExprs {
         return switch type {
             case SArray(vtype): new ArraySExprs(getSExpressions(vtype));
-            case SMap(vtype): new MapSExprs(getSExpressions(vtype));
+            case SMap(vtype, ktype): new MapSExprs(getSExpressions(vtype), ktype);
             case SFArray(vtype): new FixedArraySExprs(getSExpressions(vtype));
             case SClass(ctr): if (ctr != null) new ClassSExprs(ctr) else singletones[SClass(null)];
             case SEnum(et): new EnumSExprs(et);
@@ -79,7 +79,7 @@ class SerializerStorage {
                     case TEnum(_.get() => et, params):
                         SEnum(et);
                     case TType(_.get() => {name: "Map"}, params), TAbstract(_.get() => {name: "Map"}, params):
-                        SMap(toSerializingType(params[1].toComplexType(), name, pos, ctx));
+                        SMap(toSerializingType(params[1].toComplexType(), name, pos, ctx), params[0].toComplexType());
                     case TAnonymous(a):
                         SValue;
                     case TAbstract(_.get() => at, params):
@@ -321,15 +321,26 @@ class MapSExprs implements SerializableExprs {
     static var jPostfix = 0;
 
     var valueExprs:SerializableExprs;
+    var keyType:ComplexType;
 
-    public function new(valueExprs) {
+    public function new(valueExprs, keyType) {
         this.valueExprs = valueExprs;
+        this.keyType = keyType;
     }
 
     /** Returns an expression the value of which represents value from runtime to be serialized **/
     public function runtimeValueExpr(name:Expr):Expr {
         var itemExpr = macro $name.get(__k);
-        return macro [for (__k in $name.keys()) [__k, ${valueExprs.runtimeValueExpr(itemExpr)}]];
+        return macro {
+            var _res = []; 
+            var map:Map<$keyType, Any> = $name;
+            for (__k in map.keys()) {
+                var pair:Array<Dynamic> = [__k, ${valueExprs.runtimeValueExpr(itemExpr)}];
+               _res.push(pair);
+            }
+            _res;
+        }
+        // return macro [for (__k in $name.keys()) [__k, ${valueExprs.runtimeValueExpr(itemExpr)}]];
     }
 
     /** receives expression of "value extracted from data" and Returns an expression which put received value to the runtime instance 
@@ -355,7 +366,7 @@ class MapSExprs implements SerializableExprs {
     }
 
     public function assertExpr(name:Expr):Null<Expr> {
-        return macro if ($name == null) $name = new Map();
+        return macro null;//if ($name == null) $name = new Map();
 }
 }
 
