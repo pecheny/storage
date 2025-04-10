@@ -73,7 +73,7 @@ class SerializerStorage {
                             SArray(toSerializingType(cpt.toComplexType(), name, pos, ctx));
                         }
                     case TInst(_.get() => ct, params):
-                        if (!FieldUtils.implementz (ct, "Serializable"))
+                        if (!FieldUtils.implementz(ct, "Serializable"))
                             Context.error('${ct.name} doesnt implement Serializable, $t, ${t.follow()},\n\n\n\n $p', pos);
                         SClass(ctx.itemCtr);
                     case TEnum(_.get() => et, params):
@@ -166,7 +166,7 @@ class SerializableMacro {
                     var stype = SerializerStorage.toSerializingType(ct, name, pos, ctx);
                     var sexprs = SerializerStorage.getSExpressions(stype);
                     dumpExprs.push(macro Reflect.setField(data, $v{name}, ${sexprs.runtimeValueExpr(macro this.$name)}));
-                    var loadAndAssignExp = sexprs.loadValueExpr(macro this.$name, sexprs.serializedValueExpr(name)) ;
+                    var loadAndAssignExp = sexprs.loadValueExpr(macro this.$name, sexprs.serializedValueExpr(name));
                     if (ctx.skipNullLoad)
                         loadAndAssignExp = macro if (Reflect.hasField(data, $v{name})) $loadAndAssignExp;
                     loadExprs.push(loadAndAssignExp);
@@ -317,6 +317,7 @@ class FixedArraySExprs implements SerializableExprs {
         return macro null;
     }
 }
+
 class MapSExprs implements SerializableExprs {
     static var jPostfix = 0;
 
@@ -332,11 +333,11 @@ class MapSExprs implements SerializableExprs {
     public function runtimeValueExpr(name:Expr):Expr {
         var itemExpr = macro $name.get(__k);
         return macro {
-            var _res = []; 
+            var _res = [];
             var map:Map<$keyType, Any> = $name;
             for (__k in map.keys()) {
                 var pair:Array<Dynamic> = [__k, ${valueExprs.runtimeValueExpr(itemExpr)}];
-               _res.push(pair);
+                _res.push(pair);
             }
             _res;
         }
@@ -349,7 +350,7 @@ class MapSExprs implements SerializableExprs {
     public function loadValueExpr(name:Expr, serializedValueExpr:Expr):Expr {
         return macro {
             $name.clear();
-            var data:Array<Dynamic> = $serializedValueExpr; 
+            var data:Array<Dynamic> = $serializedValueExpr;
             for ($i{"j" + ++jPostfix} in 0...data.length) {
                 var pair:Array<Dynamic> = data[$i{"j" + jPostfix}];
                 var value:Dynamic;
@@ -366,10 +367,9 @@ class MapSExprs implements SerializableExprs {
     }
 
     public function assertExpr(name:Expr):Null<Expr> {
-        return macro null;//if ($name == null) $name = new Map();
+        return macro if ($name == null) $name = new Map();
+    }
 }
-}
-
 
 class ArraySExprs implements SerializableExprs {
     static var jPostfix = 0;
