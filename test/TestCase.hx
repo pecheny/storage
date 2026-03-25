@@ -16,6 +16,8 @@ class TestCase extends utest.Test {
         var data = '{
             "intVar":6,
             "map":[["key", "newVal"]],
+            "mapi":[["key", 5]],
+            "mapb":[["key", true]],
             "cl": { "stringVar": "rts", "strings": [["foo", "bar"]] },
             "enu": {"C":{}},
             "fold": { "Folded":{"a":{"Bfo":{}}}},
@@ -79,6 +81,8 @@ class Foo implements Serializable {
 
     @:serialize public var cl:Bar = new Bar();
     @:serialize public var map:Map<String, String> = ["key" => "val"];
+    @:serialize public var mapi:Map<String, Int> = ["key" => 4];
+    @:serialize public var mapb:Map<String, Bool> = ["key" => true];
 
     @:serialize(itemCtr = new Bar()) public var bars:Array<Bar> = [];
     @:serialize(fixedArray = true) public var fixedBars:Array<Bar> = [new Bar()];
