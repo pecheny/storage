@@ -55,7 +55,7 @@ class SerializerStorage {
         return switch ct {
             case null:
                 Context.error('Define explicit type for $name variable to be serialized', pos);
-            case macro :Int, macro :String, macro :Float, macro :Bool, TPath({name: "StdTypes", sub: "Int" | "Bool" }), TAnonymous(_):
+            case macro :Int, macro :String, macro :Float, macro :Bool, TPath({name: "StdTypes", sub: "Int" | "Bool" | "Float" }), TAnonymous(_):
                 SValue;
             case TPath({name: 'Array', params: [TPType(cpt)]}):
                 if (ctx.fixedArray) {
