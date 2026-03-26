@@ -7,6 +7,7 @@ class TestCase extends utest.Test {
     var foo:Foo;
     var bar:Bar;
     var fixArray:Array<Bar>;
+    var descr:Dynamic;
 
     public function setup() {
         foo = new Foo();
@@ -27,12 +28,43 @@ class TestCase extends utest.Test {
             "bars": [{ "stringVar": "ttt", "strings": [["foo", "bar"]] }],
              "tdTomap" : [["Bar",2]]
         }';
-        var deser = Json.parse(data);
+        descr = Json.parse(data);
 
-        foo.load(deser);
+        foo.load(descr);
         trace(foo.dump());
     }
 
+    function testDump() {
+        Assert.isTrue(deepEqual(descr, foo.dump()));
+    }
+
+    function isPrimitive(v:Any):Bool {
+        return Std.isOfType(v, Int) || Std.isOfType(v, Float) || Std.isOfType(v, Bool) || Std.isOfType(v, String);
+    }
+
+    // for used cases only
+    function deepEqual(a:Dynamic, b:Dynamic) {
+        if (isPrimitive(a))
+            return a == b;
+        if (Std.isOfType(a, Array)) {
+            if (!Std.isOfType(b, Array))
+                return false;
+            var a:Array<Dynamic> = cast a;
+            var b:Array<Dynamic> = cast b;
+            if (a.length != b.length)
+                return false;
+            for (i in 0...a.length) {
+                if (!deepEqual(a[i], b[i]))
+                    return false;
+            }
+        } else {
+            var keys = Reflect.fields(a);
+            for (key in keys)
+                if (!deepEqual(Reflect.field(a, key), Reflect.field(b, key)))
+                    return false;
+        }
+        return true;
+    }
 
     function specField() {
         foo.boolVar == false;
@@ -59,7 +91,7 @@ class TestCase extends utest.Test {
         fixArray == foo.fixedBars;
         foo.fixedBars[0].stringVar == "fixed";
     }
-    
+
     function specEnum() {
         foo.enu.match(C) == true;
         foo.fold.match(Folded(Bfo)) == true;
@@ -70,12 +102,10 @@ class TestCase extends utest.Test {
         };
         s == true;
     }
-    
-    
-    
 }
 
 class Foo implements Serializable {
+    // @:serialize(load=haxe.ds.Vector.fromArrayCopy, dump=a->"" + a.toArray()) public var vec:haxe.ds.Vector<Int>;
     @:serialize public var intVar:Int = 5;
     @:serialize public var boolVar:Bool = true;
 
@@ -89,20 +119,19 @@ class Foo implements Serializable {
 
     @:serialize public var data:DataParam = {value: "DATA"};
     @:serialize public var enu:A = IntParam(5);
-    @:serialize public var fold:A ;
-    @:serialize public var dataEnum:A ;
+    @:serialize public var fold:A;
+    @:serialize public var dataEnum:A;
     @:serialize public var abstr:DialogUri = "dialog";
     @:serialize public var roomEnumAbstract:DummyRoomType = red;
-    @:serialize(skipNullLoad=true) public var tdTomap:ToMap = ["Foo" => 1];
-    @:serialize(skipNullLoad=true) public var arrtdTomap:Array<ToMap> = [];
-    
+    @:serialize(skipNullLoad = true) public var tdTomap:ToMap = ["Foo" => 1];
+    @:serialize(skipNullLoad = true) public var arrtdTomap:Array<ToMap> = [];
+
     // @:serialize var fo:Folded = Afo;
 
     public function new() {}
 }
 
 typedef ToMap = Map<String, Int>;
-
 abstract DialogUri(String) to String from String {}
 
 enum abstract DummyRoomType(Int) to Int {
@@ -113,7 +142,6 @@ enum abstract DummyRoomType(Int) to Int {
 typedef DataParam = {
     value:String,
 }
-
 
 enum Folded {
     Afo(v:String);
@@ -128,7 +156,6 @@ enum A {
     // ClassParam(inst:Bar);
     C;
 }
-
 
 class Bar implements Serializable {
     @:serialize public var stringVar:String = "str";
