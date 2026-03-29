@@ -80,7 +80,7 @@ class SerializerStorage {
                         SEnum(et);
                     case TType(_.get() => {name: "Map"}, params), TAbstract(_.get() => {name: "Map"}, params):
                         SMap(toSerializingType(params[1].toComplexType(), name, pos, ctx), params[0].toComplexType());
-                    case TAnonymous(a):
+                    case TAnonymous(_), TDynamic(_):
                         SValue;
                     case TAbstract(_.get() => at, params):
                         toSerializingType(at.type.followWithAbstracts().toComplexType(), name, pos, ctx);
