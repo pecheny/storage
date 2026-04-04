@@ -187,11 +187,18 @@ class SerializableMacro {
             }
             dumpExprs.finalize();
         }
-
         var loadRequired = hasSerializing || loadExprs.found || !dumpExprs.hasSuper;
-        if (loadRequired)
+        if (loadRequired) {
+            var signalName =  "loaded" + lc.name;
+            fields.push({
+                kind: FVar(macro:fu.Signal<Void->Void>, macro new fu.Signal()),
+                name: signalName,
+                access:[APublic],
+                pos: Context.currentPos()
+            });
+            loadExprs.push(macro $i{signalName}.dispatch());
             loadExprs.finalize();
-
+        }
         return fields;
     }
 }
